@@ -45,6 +45,7 @@ namespace caffe {
 			Dtype currIntersectionSum = caffe_cpu_asum(dimSize, intersection + i * dimSize);
 			intersectionSum.push_back(currIntersectionSum);
 
+			// TODO : += ?
 			top[0]->mutable_cpu_data()[0] += 2.0 * currIntersectionSum / (predictionSum[i] + labelSum[i]);
 		}
 	}
@@ -57,7 +58,28 @@ namespace caffe {
 		}
 
 		if (propagate_down[0]) {
+			const Dtype* data = bottom[0]->cpu_data();
+			const Dtype* label = bottom[1]->cpu_data();
 
+			const int labelCount = bottom[1]->count();
+			const int batchSize = bottom[0]->num();
+			const int dimSize = labelCount / batchSize;
+
+			for (int i = 0; i < batchSize; i++) {
+				Dtype currUnion = predictionSum[i] + labelSum[i];
+				Dtype currIntersection = intersectionSum[i];
+				for (int j = 0; j < dimSize; j++) {
+					// we always have 2 channel for dice
+					Dtype currLabel = label[i * dimSize + j];
+					Dtype currData1 = data[(i * 2) * dimSize + j];
+					Dtype currData2 = data[(i * 2 + 1) * dimSize + j];
+
+					bottom[0]->mutable_cpu_diff()[(i * 2) * dimSize + j] = 
+						2.0 * ((currLabel * currUnion) / (currUnion * currUnion) - 2.0 * currData1 * currIntersection / (currUnion * currUnion));
+					bottom[0]->mutable_cpu_diff()[(i * 2 + 1) * dimSize + j] = 
+						2.0 * ((currLabel * currUnion) / (currUnion * currUnion) - 2.0 * currData1 * currIntersection / (currUnion * currUnion));
+				}
+			}
 		}
 	}
 
