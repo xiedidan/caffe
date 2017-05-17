@@ -23,7 +23,7 @@ namespace caffe {
 		for (int i = 0; i < labelCount; i++) {
 			bottom[1]->mutable_cpu_diff()[i] = data[i] >= data[i + labelCount] ? 0 : 1;
 		}
-		const Dtype* prediction = bottom[1]->cpu_diff();
+		Dtype* prediction = bottom[1]->cpu_diff();
 
 		top[0]->mutable_cpu_data()[0] = Dtype(0);
 		predictionSum.clear();
@@ -41,11 +41,12 @@ namespace caffe {
 		caffe_mul(labelCount, prediction, label, intersection);
 
 		intersectionSum.clear();
+		top[0]->mutable_cpu_data()[0] = Dtype(0);
 		for (int i = 0; i < batchSize; i++) {
 			Dtype currIntersectionSum = caffe_cpu_asum(dimSize, intersection + i * dimSize);
 			intersectionSum.push_back(currIntersectionSum);
 
-			// TODO : += ?
+			// total dice
 			top[0]->mutable_cpu_data()[0] += 2.0 * currIntersectionSum / (predictionSum[i] + labelSum[i]);
 		}
 	}
@@ -69,7 +70,7 @@ namespace caffe {
 				Dtype currUnion = predictionSum[i] + labelSum[i];
 				Dtype currIntersection = intersectionSum[i];
 				for (int j = 0; j < dimSize; j++) {
-					// we always have 2 channel for dice
+					// we always have 2 channels for dice
 					Dtype currLabel = label[i * dimSize + j];
 					Dtype currData1 = data[(i * 2) * dimSize + j];
 					Dtype currData2 = data[(i * 2 + 1) * dimSize + j];
@@ -77,7 +78,7 @@ namespace caffe {
 					bottom[0]->mutable_cpu_diff()[(i * 2) * dimSize + j] = 
 						2.0 * ((currLabel * currUnion) / (currUnion * currUnion) - 2.0 * currData1 * currIntersection / (currUnion * currUnion));
 					bottom[0]->mutable_cpu_diff()[(i * 2 + 1) * dimSize + j] = 
-						2.0 * ((currLabel * currUnion) / (currUnion * currUnion) - 2.0 * currData1 * currIntersection / (currUnion * currUnion));
+						-2.0 * ((currLabel * currUnion) / (currUnion * currUnion) - 2.0 * currData1 * currIntersection / (currUnion * currUnion));
 				}
 			}
 		}
@@ -87,8 +88,8 @@ namespace caffe {
 	STUB_GPU(DiceLossLayer);
 #endif
 	
-	INSTANTIATE_CLASS(EuclideanLossLayer);
-	REGISTER_LAYER_CLASS(EuclideanLoss);
+	INSTANTIATE_CLASS(DiceLossLayer);
+	REGISTER_LAYER_CLASS(DiceLoss);
 
 } // namespace caffe
 
