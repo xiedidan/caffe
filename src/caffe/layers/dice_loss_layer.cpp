@@ -9,7 +9,8 @@ namespace caffe {
 		vector<int> topShape(0);
 		top[0]->Reshape(topShape);
 
-		vector<int> sumShape(bottom[1].shape(0);
+		vector<int> sumShape(1);
+		sumShape[0] = bottom[1]->num();
 		predictionSum.Reshape(sumShape);
 		labelSum.Reshape(sumShape);
 		intersectionSum.Reshape(sumShape);
