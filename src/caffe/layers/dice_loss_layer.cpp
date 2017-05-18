@@ -8,6 +8,11 @@ namespace caffe {
 	void DiceLossLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top) {
 		vector<int> topShape(0);
 		top[0]->Reshape(topShape);
+
+		vector<int> sumShape(bottom[1].shape(0);
+		predictionSum.Reshape(sumShape);
+		labelSum.Reshape(sumShape);
+		intersectionSum.Reshape(sumShape);
 	}
 
 	template <typename Dtype>
@@ -21,33 +26,25 @@ namespace caffe {
 
 		// bottom[1]->cpu_diff is not used (for backward), so use it to save memory
 		for (int i = 0; i < labelCount; i++) {
-			bottom[1]->mutable_cpu_diff()[i] = data[i] >= data[i + labelCount] ? 0 : 1;
+			bottom[1]->mutable_cpu_diff()[i] = data[i] >= data[i + labelCount] ? 1 : 0;
 		}
-		Dtype* prediction = bottom[1]->cpu_diff();
+		const Dtype* prediction = bottom[1]->cpu_diff();
 
-		top[0]->mutable_cpu_data()[0] = Dtype(0);
-		predictionSum.clear();
-		labelSum.clear();
 		for (int i = 0; i < batchSize; i++) {
-			Dtype currPredictionSum = caffe_cpu_asum(dimSize, prediction + i * dimSize);
-			predictionSum.push_back(currPredictionSum);
-
-			Dtype currLabelSum = caffe_cpu_asum(dimSize, label + i * dimSize);
-			labelSum.push_back(currLabelSum);
+			predictionSum.mutable_cpu_data()[i] = caffe_cpu_asum(dimSize, prediction + i * dimSize);
+			labelSum.mutable_cpu_data()[i] = caffe_cpu_asum(dimSize, label + i * dimSize);
 		}
 
 		// again, use bottom[1]->cpu_diff to save memory
 		Dtype* intersection = bottom[1]->mutable_cpu_diff();
 		caffe_mul(labelCount, prediction, label, intersection);
 
-		intersectionSum.clear();
 		top[0]->mutable_cpu_data()[0] = Dtype(0);
 		for (int i = 0; i < batchSize; i++) {
-			Dtype currIntersectionSum = caffe_cpu_asum(dimSize, intersection + i * dimSize);
-			intersectionSum.push_back(currIntersectionSum);
+			intersectionSum.mutable_cpu_data()[i] = caffe_cpu_asum(dimSize, intersection + i * dimSize);
 
 			// total dice
-			top[0]->mutable_cpu_data()[0] += 2.0 * currIntersectionSum / (predictionSum[i] + labelSum[i]);
+			top[0]->mutable_cpu_data()[0] += 2.0 * intersectionSum.cpu_data()[i] / (predictionSum.cpu_data()[i] + labelSum.cpu_data()[i]);
 		}
 	}
 
@@ -67,8 +64,8 @@ namespace caffe {
 			const int dimSize = labelCount / batchSize;
 
 			for (int i = 0; i < batchSize; i++) {
-				Dtype currUnion = predictionSum[i] + labelSum[i];
-				Dtype currIntersection = intersectionSum[i];
+				Dtype currUnion = predictionSum.cpu_data()[i] + labelSum.cpu_data()[i];
+				Dtype currIntersection = intersectionSum.cpu_data()[i];
 				for (int j = 0; j < dimSize; j++) {
 					// we always have 2 channels for dice
 					Dtype currLabel = label[i * dimSize + j];

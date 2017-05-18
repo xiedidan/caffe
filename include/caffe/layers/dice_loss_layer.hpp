@@ -11,7 +11,7 @@
 
 namespace caffe {
 	template <typename Dtype>
-	class DiceWithLossLayer : public LossLayer<Dtype> {
+	class DiceLossLayer : public LossLayer<Dtype> {
 	public:
 		explicit DiceLossLayer(const LayerParameter& param) : LossLayer<Dtype>(param) {}
 		virtual void Reshape(const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top);
@@ -26,9 +26,9 @@ namespace caffe {
 		virtual void Backward_cpu(const vector<Blob<Dtype>*>& top, const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
 		virtual void Backward_gpu(const vector<Blob<Dtype>*>& top, const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
 
-		vector<Dtype> predictionSum;
-		vector<Dtype> labelSum;
-		vector<Dtype> intersectionSum;
+		Blob<Dtype> predictionSum;
+		Blob<Dtype> labelSum;
+		Blob<Dtype> intersectionSum;
 	};
 } // namespace caffe
 

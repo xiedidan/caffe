@@ -7,9 +7,18 @@
 
 namespace caffe {
 	template <typename Dtype>
-	__global__ void ArgMax(const int n, const Dtype* score, Dtype* predictions) {
+	__global__ void ArgMax(const int n, const Dtype* data, Dtype* prediction) {
 		CUDA_KERNEL_LOOP(i, n) {
-			predictions[i] = score[i] >= score[i + n] ? 0 : 1;
+			prediction[i] = data[i] >= data[i + n] ? 1 : 0;
+		}
+	}
+
+	template <typename Dtype>
+	__global__ void SegmentSum(const int count, const int segmentSize, const Dtype* data, Dtype* sum) {
+		CUDA_KERNEL_LOOP(i, count) {
+			// TODO : faster implementation?
+			int sumIndex = i / segmentSize;
+			sum[sumIndex] += data[i];
 		}
 	}
 
@@ -22,41 +31,58 @@ namespace caffe {
 		const int batchSize = bottom[1]->num();
 		const int dimSize = labelCount / batchSize;
 
-		// use bottom[1]->gpu_diff to save gpu memory
-		Dtype* prediction = bottom[1]->mutable_gpu_diff();
-
 		// call cuda method to compute prediction
 		// NOLINT_NEXT_LINE(whitespace/operators)
-		ArgMax<Dtype> << <CAFFE_GET_BLOCKS(count), CAFFE_CUDA_NUM_THREADS >> >(
+		ArgMax<Dtype> <<<CAFFE_GET_BLOCKS(count), CAFFE_CUDA_NUM_THREADS>>>(
 			labelCount,
 			data,
-			prediction
+			bottom[1]->mutable_gpu_diff()
+		);
+		const Dtype* prediction = bottom[1]->gpu_diff();
+
+		// NOLINT_NEXT_LINE(whitespace/operators)
+		SegmentSum<Dtype> <<<CAFFE_GET_BLOCKS(labelCount), CAFFE_CUDA_NUM_THREADS>>>(
+			labelCount,
+			dimSize,
+			prediction,
+			predictionSum.mutable_gpu_data()
 		);
 
-		predictionSum.clear();
-		labelSum.clear();
-		for (int i = 0; i < batchSize; i++) {
-			Dtype currPredictionSum;
-			Dtype currLabelSum;
-
-			caffe_gpu_asum(dimSize, prediction + i * dimSize, &currPredictionSum);
-			caffe_gpu_asum(dimSize, label + i * dimSize, &currPredictionSum);
-			
-			predictionSum.push_back(currPredictionSum);
-			labelSum.push_back(currLabelSum);
-		}
+		// NOLINT_NEXT_LINE(whitespace/operators)
+		SegmentSum<Dtype> <<<CAFFE_GET_BLOCKS(labelCount), CAFFE_CUDA_NUM_THREADS>>>(
+			labelCount,
+			dimSize,
+			label,
+			labelSum.mutable_gpu_data()
+		);
 		
-		Dtype* intersection = bottom[1]->mutable_gpu_diff();
-		caffe_gpu_mul(labelCount, prediction, label, intersection);
+		caffe_gpu_mul(labelCount, prediction, label, bottom[1]->mutable_gpu_diff());
+		// NOLINT_NEXT_LINE(whitespace/operators)
+		SegmentSum<Dtype> <<<CAFFE_GET_BLOCKS(labelCount), CAFFE_CUDA_NUM_THREADS>>>(
+			labelCount,
+			dimSize,
+			bottom[1]->gpu_diff(),
+			intersectionSum.mutable_gpu_data()
+		);
 
-		intersectionSum.clear();
+		top[0]->mutable_cpu_data()[0] = Dtype(0);
 		for (int i = 0; i < batchSize; i++) {
-			Dtype currIntersectionSum;
-			caffe_gpu_asum(dimSize, intersection + i * dimSize, &currIntersectionSum);
-			intersectionSum.push_back(currIntersectionSum);
-
 			// total dice - it's simple so we directly compute on cpu
-			top[0]->mutable_cpu_data()[0] = 2.0 * currIntersectionSum / (predictionSum[i] + labelSum[i]);
+			top[0]->mutable_cpu_data()[0] += 2.0 * intersectionSum.cpu_data()[i] / (predictionSum.cpu_data[i] + labelSum.cpu_data[i]);
+		}
+	}
+
+	template <typename Dtype>
+	__global__ void SegmentDiff(const int count, const int segmentSize, 
+		const Dtype* data, const Dtype* label, 
+		const Dtype* predictionSum, const Dtype* labelSum, const Dtype* intersectionSum, 
+		Dtype* diff) {
+		CUDA_KERNEL_LOOP(i, count) {
+			int batchNo = i / segmentSize;
+			Dtype union = predictionSum[batchNo] + labelSum[batchNo];
+
+			diff[i] = Dtype(2.0) * ((label[i] * union) / (union * union) - Dtype(2.0) * (data[i] * intersectionSum[batchNo]) / (union * union));
+			diff[i + count] = Dtype(-2.0) * ((label[i] * union) / (union * union) - Dtype(2.0) * (data[i + count] * intersectionSum[batchNo]) / (union * union));
 		}
 	}
 
@@ -75,22 +101,13 @@ namespace caffe {
 			const int batchSize = bottom[0]->num();
 			const int dimSize = labelCount / batchSize;
 
-			for (int i = 0; i < batchSize; i++) {
-				Dtype currUnion = predictionSum[i] + labelSum[i];
-				Dtype currIntersection = intersectionSum[i];
-
-				for (int j = 0; j < dimSize; j++) {
-					// we always have 2 channels for dice
-					Dtype currLabel = label[i * dimSize + j];
-					Dtype currData1 = data[(i * 2) * dimSize + j];
-					Dtype currData2 = data[(i * 2 + 1) * dimSize + j];
-
-					bottom[0]->mutable_cpu_diff()[(i * 2) * dimSize + j] =
-						2.0 * ((currLabel * currUnion) / (currUnion * currUnion) - 2.0 * currData1 * currIntersection / (currUnion * currUnion));
-					bottom[0]->mutable_cpu_diff()[(i * 2 + 1) * dimSize + j] =
-						-2.0 * ((currLabel * currUnion) / (currUnion * currUnion) - 2.0 * currData1 * currIntersection / (currUnion * currUnion));
-				}
-			}
+			// NOLINT_NEXT_LINE(whitespace/operators)
+			SegmentDiff<Dtype> <<<CAFFE_GET_BLOCKS(labelCount), CAFFE_CUDA_NUM_THREADS>>>(
+				labelCount, dimSize,
+				data, label,
+				predictionSum.gpu_data(), labelSum.gpu_data(), intersectionSum.gpu_data(),
+				bottom[0]->mutable_gpu_diff()
+			);
 		}
 	}
 
