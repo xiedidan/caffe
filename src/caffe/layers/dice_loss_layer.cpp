@@ -76,7 +76,7 @@ namespace caffe {
 					bottom[0]->mutable_cpu_diff()[(i * 2) * dimSize + j] = 
 						2.0 * ((currLabel * currUnion) / (currUnion * currUnion) - 2.0 * currData1 * currIntersection / (currUnion * currUnion));
 					bottom[0]->mutable_cpu_diff()[(i * 2 + 1) * dimSize + j] = 
-						-2.0 * ((currLabel * currUnion) / (currUnion * currUnion) - 2.0 * currData1 * currIntersection / (currUnion * currUnion));
+						-2.0 * ((currLabel * currUnion) / (currUnion * currUnion) - 2.0 * currData2 * currIntersection / (currUnion * currUnion));
 				}
 			}
 		}

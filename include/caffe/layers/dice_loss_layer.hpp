@@ -10,8 +10,8 @@
 #include "caffe/layers/loss_layer.hpp"
 
 namespace caffe {
-template <typename Dtype>
-class DiceLossLayer : public LossLayer<Dtype> {
+	template <typename Dtype>
+	class DiceLossLayer : public LossLayer<Dtype> {
 	public:
 		explicit DiceLossLayer(const LayerParameter& param) : LossLayer<Dtype>(param) {}
 		virtual void Reshape(const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top);
@@ -29,6 +29,9 @@ class DiceLossLayer : public LossLayer<Dtype> {
 		Blob<Dtype> predictionSum;
 		Blob<Dtype> labelSum;
 		Blob<Dtype> intersectionSum;
+
+	private:
+		void gpuSegmentSum(const int count, const int segmentCount, const Dtype* data, Dtype* sum);
 	};
 } // namespace caffe
 

@@ -42,10 +42,16 @@ namespace caffe {
 			Dtype* data = blob_bottom_data_->mutable_cpu_data();
 			Dtype* label = blob_bottom_label_->mutable_cpu_data();
 			for (int i = 0; i < 4; i++) {
-				for (int j = 0; j < 1024; j++) {
-					data[i * 1024 + j] = Dtype(1);
-					data[i * 1024 + j + 4 * 1024] = Dtype(0);
-					label[i * 1024 + j] = Dtype(1);
+				for (int j = 0; j < 512; j++) {
+					data[i * 1024 + j * 2] = Dtype(1);
+					data[i * 1024 + j * 2 + 4 * 1024] = Dtype(0);
+					label[i * 1024 + j * 2] = Dtype(1);
+				}
+
+				for (int j = 0; j < 512; j++) {
+					data[i * 1024 + j * 2 + 1] = Dtype(0);
+					data[i * 1024 + j * 2 + 1 + 4 * 1024] = Dtype(1);
+					label[i * 1024 + j * 2 + 1] = Dtype(1);
 				}
 			}
 
@@ -56,17 +62,23 @@ namespace caffe {
 			diceLossLayer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
 
 			const Dtype loss = blob_top_loss_->cpu_data()[0];
-			EXPECT_NEAR(Dtype(4.0), loss, Dtype(0.0001));
+			EXPECT_NEAR(Dtype(8.0 / 3.0), loss, Dtype(0.0001));
 		}
 
 		void TestBackward() {
 			Dtype* data = blob_bottom_data_->mutable_cpu_data();
 			Dtype* label = blob_bottom_label_->mutable_cpu_data();
 			for (int i = 0; i < 4; i++) {
-				for (int j = 0; j < 1024; j++) {
-					data[i * 1024 + j] = Dtype(1);
-					data[i * 1024 + j + 4 * 1024] = Dtype(0);
-					label[i * 1024 + j] = Dtype(1);
+				for (int j = 0; j < 512; j++) {
+					data[i * 1024 + j * 2] = Dtype(0);
+					data[i * 1024 + j * 2 + 4 * 1024] = Dtype(1);
+					label[i * 1024 + j * 2] = Dtype(1);
+				}
+
+				for (int j = 0; j < 512; j++) {
+					data[i * 1024 + j * 2 + 1] = Dtype(0);
+					data[i * 1024 + j * 2 + 1 + 4 * 1024] = Dtype(1);
+					label[i * 1024 + j * 2 + 1] = Dtype(1);
 				}
 			}
 
@@ -81,11 +93,9 @@ namespace caffe {
 			propagate_down[1] = false;
 			diceLossLayer.Backward(this->blob_top_vec_, propagate_down, this->blob_bottom_vec_);
 			
-			for (int i = 0; i < 1024; i++) {
-				const Dtype* diff = this->blob_bottom_vec_[0]->cpu_diff();
-				EXPECT_NEAR(Dtype(0), diff[i], Dtype(0.0001));
-				EXPECT_NEAR(Dtype(0), diff[i + 1024], Dtype(0.0001));
-			}
+			const Dtype* diff = this->blob_bottom_vec_[0]->cpu_diff();
+			EXPECT_NEAR(Dtype(0), diff[512], Dtype(0.0001));
+			EXPECT_NEAR(Dtype(0), diff[512 + 1024], Dtype(0.0001));
 		}
 
 		Blob<Dtype>* const blob_bottom_data_;

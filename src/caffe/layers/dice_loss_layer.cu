@@ -16,17 +16,26 @@ namespace caffe {
 	template <typename Dtype>
 	__global__ void SegmentSum(const int count, const int segmentSize, const Dtype* data, Dtype* sum) {
 		CUDA_KERNEL_LOOP(i, count) {
-			// TODO : faster implementation?
-			int sumIndex = i / segmentSize;
-			sum[sumIndex] += data[i];
+			// TODO : consider grid
+			sum[i] = Dtype(0);
+
+			for (int j = 0; j < segmentSize; j++) {
+				sum[i] += data[i * segmentSize + j];
+			}
 		}
 	}
 
 	template <typename Dtype>
-	__global__ void gpuMemset(const int count, Dtype* data, const Dtype value) {
-		CUDA_KERNEL_LOOP(i, count) {
-			data[i] = value;
-		}
+	void DiceLossLayer<Dtype>::gpuSegmentSum(const int count, const int segmentCount, const Dtype* data, Dtype* sum) {
+		const int segmentSize = count / segmentCount;
+
+		// NOLINT_NEXT_LINE(whitespace/operators)
+		SegmentSum<Dtype> << <CAFFE_GET_BLOCKS(segmentCount), CAFFE_CUDA_NUM_THREADS >> >(
+			segmentCount,
+			segmentSize,
+			data,
+			sum
+			);
 	}
 
 	template <typename Dtype>
@@ -36,7 +45,6 @@ namespace caffe {
 
 		const int labelCount = bottom[1]->count();
 		const int batchSize = bottom[1]->num();
-		const int dimSize = labelCount / batchSize;
 
 		// call cuda method to compute prediction
 
@@ -48,67 +56,27 @@ namespace caffe {
 		);
 		const Dtype* prediction = bottom[1]->gpu_diff();
 		
+		/*
 		caffe_gpu_asum(labelCount, prediction, predictionSum.mutable_cpu_data());
 		caffe_gpu_asum(labelCount, label, labelSum.mutable_cpu_data());
 		caffe_gpu_mul(labelCount, prediction, label, bottom[1]->mutable_gpu_diff());
 		caffe_gpu_asum(labelCount, bottom[1]->gpu_diff(), intersectionSum.mutable_cpu_data());
 		top[0]->mutable_cpu_data()[0] = 2.0 * intersectionSum.cpu_data()[0] / (predictionSum.cpu_data()[0] + labelSum.cpu_data()[0]);
-		
-		/*
-		// NOLINT_NEXT_LINE(whitespace/operators)
-		gpuMemset<Dtype> << <CAFFE_GET_BLOCKS(batchSize), CAFFE_CUDA_NUM_THREADS >> >(
-			batchSize,
-			predictionSum.mutable_gpu_data(),
-			Dtype(0)
-		);
+		*/
 
-		// NOLINT_NEXT_LINE(whitespace/operators)
-		SegmentSum<Dtype> <<<CAFFE_GET_BLOCKS(labelCount), CAFFE_CUDA_NUM_THREADS>>>(
-			labelCount,
-			dimSize,
-			prediction,
-			predictionSum.mutable_gpu_data()
-		);
-
-		// NOLINT_NEXT_LINE(whitespace/operators)
-		gpuMemset<Dtype> << <CAFFE_GET_BLOCKS(batchSize), CAFFE_CUDA_NUM_THREADS >> >(
-			batchSize,
-			labelSum.mutable_gpu_data(),
-			Dtype(0)
-		);
-
-		// NOLINT_NEXT_LINE(whitespace/operators)
-		SegmentSum<Dtype> <<<CAFFE_GET_BLOCKS(labelCount), CAFFE_CUDA_NUM_THREADS>>>(
-			labelCount,
-			dimSize,
-			label,
-			labelSum.mutable_gpu_data()
-		);
+		this->gpuSegmentSum(labelCount, batchSize, prediction, predictionSum.mutable_gpu_data());
+		this->gpuSegmentSum(labelCount, batchSize, label, labelSum.mutable_gpu_data());
 		
 		caffe_gpu_mul(labelCount, prediction, label, bottom[1]->mutable_gpu_diff());
 
-		// NOLINT_NEXT_LINE(whitespace/operators)
-		gpuMemset<Dtype> << <CAFFE_GET_BLOCKS(batchSize), CAFFE_CUDA_NUM_THREADS >> >(
-			batchSize,
-			intersectionSum.mutable_gpu_data(),
-			Dtype(0)
-		);
-
-		// NOLINT_NEXT_LINE(whitespace/operators)
-		SegmentSum<Dtype> <<<CAFFE_GET_BLOCKS(labelCount), CAFFE_CUDA_NUM_THREADS>>>(
-			labelCount,
-			dimSize,
-			bottom[1]->gpu_diff(),
-			intersectionSum.mutable_gpu_data()
-		);
+		this->gpuSegmentSum(labelCount, batchSize, bottom[1]->gpu_diff(), intersectionSum.mutable_gpu_data());
 
 		// total dice - it's simple so we directly compute on cpu
 		top[0]->mutable_cpu_data()[0] = Dtype(0);
 		for (int i = 0; i < batchSize; i++) {
-			 // printf("i: %f, p: %f, l: %f\n", intersectionSum.cpu_data()[i], predictionSum.cpu_data()[i], labelSum.cpu_data()[i]);
+			printf("i: %f, p: %f, l: %f\n", intersectionSum.cpu_data()[i], predictionSum.cpu_data()[i], labelSum.cpu_data()[i]);
 			top[0]->mutable_cpu_data()[0] += 2.0 * intersectionSum.cpu_data()[i] / (predictionSum.cpu_data()[i] + labelSum.cpu_data()[i]);
 		}
-		*/
 	}
 
 	template <typename Dtype>
