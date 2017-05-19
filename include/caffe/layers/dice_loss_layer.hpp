@@ -10,8 +10,8 @@
 #include "caffe/layers/loss_layer.hpp"
 
 namespace caffe {
-	template <typename Dtype>
-	class DiceLossLayer : public LossLayer<Dtype> {
+template <typename Dtype>
+class DiceLossLayer : public LossLayer<Dtype> {
 	public:
 		explicit DiceLossLayer(const LayerParameter& param) : LossLayer<Dtype>(param) {}
 		virtual void Reshape(const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top);
