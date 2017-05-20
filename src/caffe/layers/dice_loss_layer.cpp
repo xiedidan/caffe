@@ -27,7 +27,7 @@ namespace caffe {
 
 		// bottom[1]->cpu_diff is not used (for backward), so use it to save memory
 		for (int i = 0; i < labelCount; i++) {
-			bottom[1]->mutable_cpu_diff()[i] = data[i] >= data[i + labelCount] ? 1 : 0;
+			bottom[1]->mutable_cpu_diff()[i] = data[i] >= data[i + labelCount] ? 0 : 1;
 		}
 		const Dtype* prediction = bottom[1]->cpu_diff();
 
@@ -70,12 +70,14 @@ namespace caffe {
 				for (int j = 0; j < dimSize; j++) {
 					// we always have 2 channels for dice
 					Dtype currLabel = label[i * dimSize + j];
-					Dtype currData1 = data[(i * 2) * dimSize + j];
-					Dtype currData2 = data[(i * 2 + 1) * dimSize + j];
+					Dtype currData1 = data[i * dimSize + j];
+					Dtype currData2 = data[i * dimSize + j + labelCount];
 
-					bottom[0]->mutable_cpu_diff()[(i * 2) * dimSize + j] = 
-						2.0 * ((currLabel * currUnion) / (currUnion * currUnion) - 2.0 * currData1 * currIntersection / (currUnion * currUnion));
-					bottom[0]->mutable_cpu_diff()[(i * 2 + 1) * dimSize + j] = 
+					// printf("currData1: %f, currData2: %f\n", currData1, currData2);
+
+					bottom[0]->mutable_cpu_diff()[i * dimSize + j] = 
+						2.0 * ((currLabel * currUnion) / (currUnion * currUnion) - 2.0 * currData2 * currIntersection / (currUnion * currUnion));
+					bottom[0]->mutable_cpu_diff()[i * dimSize + j + labelCount] = 
 						-2.0 * ((currLabel * currUnion) / (currUnion * currUnion) - 2.0 * currData2 * currIntersection / (currUnion * currUnion));
 				}
 			}

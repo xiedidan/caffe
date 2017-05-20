@@ -12,6 +12,9 @@
 #include "caffe/test/test_caffe_main.hpp"
 #include "caffe/test/test_gradient_check_util.hpp"
 
+#define BATCH_SIZE 2
+#define DIM_SIZE 4
+
 namespace caffe {
 	template <typename TypeParam>
 	class DiceLossLayerTest : public MultiDeviceTest<TypeParam> {
@@ -19,8 +22,8 @@ namespace caffe {
 
 	protected:
 		DiceLossLayerTest() :
-			blob_bottom_data_(new Blob<Dtype>(4, 2, 1024, 1)),
-			blob_bottom_label_(new Blob<Dtype>(4, 1, 1024, 1)),
+			blob_bottom_data_(new Blob<Dtype>(BATCH_SIZE, 2, DIM_SIZE, 1)),
+			blob_bottom_label_(new Blob<Dtype>(BATCH_SIZE, 1, DIM_SIZE, 1)),
 			blob_top_loss_(new Blob<Dtype>()) {
 			FillerParameter filler_param;
 			GaussianFiller<Dtype> filler(filler_param);
@@ -41,17 +44,17 @@ namespace caffe {
 		void TestForward() {
 			Dtype* data = blob_bottom_data_->mutable_cpu_data();
 			Dtype* label = blob_bottom_label_->mutable_cpu_data();
-			for (int i = 0; i < 4; i++) {
-				for (int j = 0; j < 512; j++) {
-					data[i * 1024 + j * 2] = Dtype(1);
-					data[i * 1024 + j * 2 + 4 * 1024] = Dtype(0);
-					label[i * 1024 + j * 2] = Dtype(1);
+			for (int i = 0; i < 2; i++) {
+				for (int j = 0; j < DIM_SIZE / 2; j++) {
+					data[i * DIM_SIZE + j * 2] = Dtype(1);
+					data[i * DIM_SIZE + j * 2 + BATCH_SIZE * DIM_SIZE] = Dtype(0);
+					label[i * DIM_SIZE + j * 2] = Dtype(1);
 				}
 
-				for (int j = 0; j < 512; j++) {
-					data[i * 1024 + j * 2 + 1] = Dtype(0);
-					data[i * 1024 + j * 2 + 1 + 4 * 1024] = Dtype(1);
-					label[i * 1024 + j * 2 + 1] = Dtype(1);
+				for (int j = 0; j < 2; j++) {
+					data[i * DIM_SIZE + j * 2 + 1] = Dtype(0);
+					data[i * DIM_SIZE + j * 2 + 1 + BATCH_SIZE * DIM_SIZE] = Dtype(1);
+					label[i * DIM_SIZE + j * 2 + 1] = Dtype(1);
 				}
 			}
 
@@ -62,23 +65,23 @@ namespace caffe {
 			diceLossLayer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
 
 			const Dtype loss = blob_top_loss_->cpu_data()[0];
-			EXPECT_NEAR(Dtype(8.0 / 3.0), loss, Dtype(0.0001));
+			EXPECT_NEAR(Dtype(2.0 * BATCH_SIZE / 3.0), loss, Dtype(0.0001));
 		}
 
 		void TestBackward() {
 			Dtype* data = blob_bottom_data_->mutable_cpu_data();
 			Dtype* label = blob_bottom_label_->mutable_cpu_data();
-			for (int i = 0; i < 4; i++) {
-				for (int j = 0; j < 512; j++) {
-					data[i * 1024 + j * 2] = Dtype(0);
-					data[i * 1024 + j * 2 + 4 * 1024] = Dtype(1);
-					label[i * 1024 + j * 2] = Dtype(1);
+			for (int i = 0; i < 2; i++) {
+				for (int j = 0; j < DIM_SIZE / 2; j++) {
+					data[i * DIM_SIZE + j * 2] = Dtype(1);
+					data[i * DIM_SIZE + j * 2 + BATCH_SIZE * DIM_SIZE] = Dtype(0);
+					label[i * DIM_SIZE + j * 2] = Dtype(1);
 				}
 
-				for (int j = 0; j < 512; j++) {
-					data[i * 1024 + j * 2 + 1] = Dtype(0);
-					data[i * 1024 + j * 2 + 1 + 4 * 1024] = Dtype(1);
-					label[i * 1024 + j * 2 + 1] = Dtype(1);
+				for (int j = 0; j < 2; j++) {
+					data[i * DIM_SIZE + j * 2 + 1] = Dtype(0);
+					data[i * DIM_SIZE + j * 2 + 1 + BATCH_SIZE * DIM_SIZE] = Dtype(1);
+					label[i * DIM_SIZE + j * 2 + 1] = Dtype(1);
 				}
 			}
 
@@ -94,8 +97,12 @@ namespace caffe {
 			diceLossLayer.Backward(this->blob_top_vec_, propagate_down, this->blob_bottom_vec_);
 			
 			const Dtype* diff = this->blob_bottom_vec_[0]->cpu_diff();
-			EXPECT_NEAR(Dtype(0), diff[512], Dtype(0.0001));
-			EXPECT_NEAR(Dtype(0), diff[512 + 1024], Dtype(0.0001));
+			for (int i = 0; i < BATCH_SIZE; i++) {
+				for (int j = 0; j < DIM_SIZE; j++) {
+					EXPECT_NEAR(Dtype(1), diff[i * DIM_SIZE + j], Dtype(0.0001));
+					EXPECT_NEAR(Dtype(1), diff[i * DIM_SIZE + j + DIM_SIZE * BATCH_SIZE], Dtype(0.0001));
+				}
+			}
 		}
 
 		Blob<Dtype>* const blob_bottom_data_;
