@@ -25,9 +25,11 @@ namespace caffe {
 		const int batchSize = bottom[1]->num();
 		const int dimSize = labelCount / batchSize;
 
+		// TODO : fix channel fetching
+
 		// bottom[1]->cpu_diff is not used (for backward), so use it to save memory
 		for (int i = 0; i < labelCount; i++) {
-			bottom[1]->mutable_cpu_diff()[i] = data[i] >= data[i + labelCount] ? 0 : 1;
+			bottom[1]->mutable_cpu_diff()[i] = data[i] > data[i + labelCount] ? 0 : 1;
 		}
 		const Dtype* prediction = bottom[1]->cpu_diff();
 
